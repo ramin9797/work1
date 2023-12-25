@@ -1,106 +1,97 @@
 const express = require('express');
 require('express-async-errors');
-const sequelize = require('./database.js');
-const Order = require('./order.model.js');
 const amqp = require('amqplib');
+const events = require('events')
 
 let channel;
+const emitter = new events.EventEmitter();
 
-async function createOrder(products, userEmail) {
-  let total = 0;
-  for (let t = 0; t < products.length; ++t) {
-    total += +products[t].price;
-  }
-
-  products = products.map(product => {
-    return product.id;
-  });
-
-  const newOrder = await Order.create({
-    products,
-    creator: userEmail,
-    totalPrice: total,
-  });
-
-  return newOrder;
-}
 
 async function connect() {
   try{
     let isConnected = false;
-    console.log('isss',isConnected)
     while(!isConnected){
       try {
         var amqp_url = process.env.CLOUDAMQP_URL || 'amqp://guest:guest@rabbitmq';
         console.log("amqp_url",amqp_url)
         const connection = await amqp.connect(amqp_url);
         channel = await connection.createChannel();
-        await channel.assertQueue('ORDER');
+        await channel.assertQueue('CALCULATE');
         isConnected = true;
       } catch (error) {
-        console.error("yeniden cehd");
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
-    // setTimeout(async () => {
-      
-    // }, 10000);
-    // conn = await amqplib.connect("am qp://stackcoder_user:StackCoderPass@localhost");
-    
   }
   catch(e){
-    console.log('22222222',e)
+    console.log('e',e)
   }
 }
 
-// connect().then(() => {
-//   channel.consume('ORDER', data => {
-//     console.log('Consuming ORDER service');
-//     const { products, userEmail } = JSON.parse(data.content);
-//     createOrder(products, userEmail)
-//       .then(newOrder => {
-//         channel.ack(data);
-//         channel.sendToQueue(
-//           'PRODUCT',
-//           Buffer.from(JSON.stringify({ newOrder }))
-//         );
-//       })
-//       .catch(err => {
-//         console.log(err);
-//       });
-//   });
-// });
+connect().then(() => {
+  console.log('connected')
+
+
+
+  channel.consume('CALC_RESULT', data => {
+    try {
+      result = JSON.parse(data.content);
+      console.log('1212121212',result)
+      emitter.emit('newMessage', result)
+
+      // Send the response to the client
+    
+    } catch (error) {
+      console.log(error);
+    } 
+  });
+
+});
 
 const app = express();
 
 app.use(express.json());
 
-const port = process.env.PORT ?? 3003;
+const port = process.env.PORT ?? 3004;
 
 app.listen(port, () => {
   try {
     console.log(`Orders Service at ${port}`);
-    connect();
+    // connect();
   } catch (error) {
     console.log('errorr',error);
   }
 });
 
 
-app.post('/products/buy', isAuthenticated, async (req, res) => {
-  channel.sendToQueue(
-    'ORDER',
-    Buffer.from(
-      JSON.stringify({
-          text:"Salam"
-      })
-    )
-  );
-  channel.consume('PRODUCT', data => {
-    console.log("Consume product",data);
-    // order = JSON.parse(data.content);
-    // console.log(order);
-  });
+
+app.post('/calc/:number',(req, res) => {
+  try {
+    let number = parseInt(req.params?.number || 0);
+    
+    // Send initial request to the queue
+    channel.sendToQueue(
+      'CALCULATE',
+      Buffer.from(
+        JSON.stringify({
+          number
+        })
+      )
+    );
+
+
+    emitter.once('newMessage', (message) => {
+      console.log('mee',message);
+      res.json(message)
+    })
+
+
+    // res.status(200).json(result);
+
+    // Ensure the consumer is canceled even if no CALC_RESULT event is received
+  } catch (e) {
+    console.log('Error:', e);
+  }
 });
 
-sequelize.sync();
+// sequelize.sync();

@@ -34,6 +34,21 @@ services:
       - postgresql
       - rabbitmq
 
+  product:
+    build:
+      context: ./product
+      args:
+        - NODE_ENV=development
+    ports:
+      - "3004:3004"
+    volumes:
+      - ./product:/app/
+    environment:
+      - SERVICE=product
+    depends_on:
+      - postgresql
+      - rabbitmq    
+
 volumes:
   data:
 

@@ -6,6 +6,7 @@ const dbConfig = {
     PASSWORD: "postgres",
     DB: "postgres",
     dialect: "postgres",
+    PORT:5433,
     pool: {
       max: 5,
       min: 0,
